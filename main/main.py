@@ -3,12 +3,12 @@ import argparse
 import sys
 import numpy as np
 import os.path
+import webcolors
 
-# Initialize the parameters
-confThreshold = 0.5  #Confidence threshold
-nmsThreshold = 0.4   #Non-maximum suppression threshold
-inpWidth = 416       #Width of network's input image
-inpHeight = 416      #Height of network's input image
+confThreshold = 0.5  
+nmsThreshold = 0.4   
+inpWidth = 416       
+inpHeight = 416      
 
 parser = argparse.ArgumentParser(description='Object Detection using YOLO in OPENCV')
 parser.add_argument('--device', default='cpu', help="Device to perform inference on 'cpu' or 'gpu'.")
@@ -16,13 +16,12 @@ parser.add_argument('--image', help='Path to image file.')
 parser.add_argument('--video', help='Path to video file.')
 args = parser.parse_args()
         
-# Load names of classes
 classesFile = "coco.names"
 classes = None
 with open(classesFile, 'rt') as f:
     classes = f.read().rstrip('\n').split('\n')
 
-# Give the configuration and weight files for the model and load the network using them.
+
 modelConfiguration = "yolov3.cfg"
 modelWeights = "yolov3.weights"
 
@@ -37,38 +36,35 @@ elif(args.device == 'gpu'):
     net.setPreferableTarget(cv.dnn.DNN_TARGET_CUDA)
     print('Using GPU device.')
 
-# Get the names of the output layers
+
 def getOutputsNames(net):
-    # Get the names of all the layers in the network
+   
     layersNames = net.getLayerNames()
-    # Get the names of the output layers, i.e. the layers with unconnected outputs
     return [layersNames[i[0] - 1] for i in net.getUnconnectedOutLayers()]
 
-# Draw the predicted bounding box
-def drawPred(classId, conf, left, top, right, bottom):
-    # Draw a bounding box.
+def drawPred(classId, conf, left, top, right, bottom, name):
+
     cv.rectangle(frame, (left, top), (right, bottom), (255, 178, 50), 3)
     
     label = '%.2f' % conf
-        
-    # Get the label for the class name and its confidence
+
     if classes:
         assert(classId < len(classes))
         label = '%s:%s' % (classes[classId], label)
 
-    #Display the label at the top of the bounding box
+    label += (' ' + name)
+
     labelSize, baseLine = cv.getTextSize(label, cv.FONT_HERSHEY_SIMPLEX, 0.5, 1)
     top = max(top, labelSize[1])
     cv.rectangle(frame, (left, top - round(1.5*labelSize[1])), (left + round(1.5*labelSize[0]), top + baseLine), (255, 255, 255), cv.FILLED)
     cv.putText(frame, label, (left, top), cv.FONT_HERSHEY_SIMPLEX, 0.75, (0,0,0), 1)
 
-# Remove the bounding boxes with low confidence using non-maxima suppression
+
 def postprocess(frame, outs):
     frameHeight = frame.shape[0]
     frameWidth = frame.shape[1]
 
-    # Scan through all the bounding boxes output from the network and keep only the
-    # ones with high confidence scores. Assign the box's class label as the class with the highest score.
+
     classIds = []
     confidences = []
     boxes = []
@@ -88,8 +84,7 @@ def postprocess(frame, outs):
                 confidences.append(float(confidence))
                 boxes.append([left, top, width, height])
 
-    # Perform non maximum suppression to eliminate redundant overlapping boxes with
-    # lower confidences.
+    
     indices = cv.dnn.NMSBoxes(boxes, confidences, confThreshold, nmsThreshold)
     for i in indices:
         i = i[0]
@@ -98,70 +93,136 @@ def postprocess(frame, outs):
         top = box[1]
         width = box[2]
         height = box[3]
-        drawPred(classIds[i], confidences[i], left, top, left + width, top + height)
 
-# Process inputs
-winName = 'Deep learning object detection in OpenCV'
-cv.namedWindow(winName, cv.WINDOW_NORMAL)
+        name = ''
+        cropped = frame[left:left+width, top:top+height]
+        # name = getColors(cropped)
 
-outputFile = "yolo_out_py.avi"
-if (args.image):
-    # Open the image file
-    if not os.path.isfile(args.image):
-        print("Input image file ", args.image, " doesn't exist")
-        sys.exit(1)
-    cap = cv.VideoCapture(args.image)
-    outputFile = args.image[:-4]+'_yolo_out_py.jpg'
-elif (args.video):
-    # Open the video file
-    if not os.path.isfile(args.video):
-        print("Input video file ", args.video, " doesn't exist")
-        sys.exit(1)
-    cap = cv.VideoCapture(args.video)
-    outputFile = args.video[:-4]+'_yolo_out_py.avi'
-else:
-    # Webcam input
-    cap = cv.VideoCapture(0)
+        drawPred(classIds[i], confidences[i], left, top, left + width, top + height, name)
+         # name = getColors(frame[left:right, bottom:top])
+       
 
-# Get the video writer initialized to save the output video
-if (not args.image):
-    vid_writer = cv.VideoWriter(outputFile, cv.VideoWriter_fourcc('M','J','P','G'), 30, (round(cap.get(cv.CAP_PROP_FRAME_WIDTH)),round(cap.get(cv.CAP_PROP_FRAME_HEIGHT))))
-
-while cv.waitKey(1) < 0:
+       
+def getColors(image):
     
-    # get frame from the video
-    hasFrame, frame = cap.read()
+    image_HSV = cv.cvtColor(image, cv.COLOR_BGR2HSV)
+
+
+
+    dictionary ={
+                    'White':([0, 0, 116], [180, 57, 255]),
     
-    # Stop the program if reached end of video
-    if not hasFrame:
-        print("Done processing !!!")
-        print("Output file is stored as ", outputFile)
-        cv.waitKey(3000)
-        # Release device
-        cap.release()
-        break
+                    'Light-red':([0,38, 56], [10,255,255]),
+                    'orange':([10, 38, 71], [20, 255, 255]),
+                    'yellow':([18, 28, 20], [33, 255, 255]),
+                    'green':([36, 10, 33], [88, 255, 255]), 
+                    'blue':([87,32, 17], [120, 255, 255]),
+                    'purple':([138, 66, 39], [155, 255, 255]),
+                    'Deep-red':([170,112, 45], [180,255,255]),
+    
+                    'black':([0, 0, 0], [179, 255, 50]),      
+                    }  
+    
+    color_name = []
+    color_count =[]
+             
+    # loop over the boundaries
+    for key,(lower,upper) in dictionary.items():
+        
+        # create NumPy arrays from the boundaries
+        lower = np.array(lower, dtype = "uint8")
+        upper = np.array(upper, dtype = "uint8")
+         
+        # find the colors within the specified boundaries and apply
+        # the mask
+     
+        mask = cv.inRange(image_HSV, lower, upper)
+        
+        count = cv.countNonZero(mask)
+        
+        color_count.append(count)
+        
+        color_name.append(key)
+    
+    color_count_array = np.array(color_count)
+    
+    idx = np.argmax(color_count_array)
 
-    # Create a 4D blob from a frame.
-    blob = cv.dnn.blobFromImage(frame, 1/255, (inpWidth, inpHeight), [0,0,0], 1, crop=False)
+    color = color_name[idx]
 
-    # Sets the input to the network
-    net.setInput(blob)
+    print(color)
+    
+    return color
+      
 
-    # Runs the forward pass to get output of the output layers
-    outs = net.forward(getOutputsNames(net))
+image = cv.imread('red.jpg')
 
-    # Remove the bounding boxes with low confidence
-    postprocess(frame, outs)
 
-    # Put efficiency information. The function getPerfProfile returns the overall time for inference(t) and the timings for each of the layers(in layersTimes)
-    t, _ = net.getPerfProfile()
-    label = 'Inference time: %.2f ms' % (t * 1000.0 / cv.getTickFrequency())
-    cv.putText(frame, label, (0, 15), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255))
+name = getColors(image)
+cv.putText(image,name,(5, 5), 2, 0.5, (0, 255, 0), 2, cv.LINE_AA)
+cv.imshow("images", image)
+cv.waitKey(5000)
 
-    # Write the frame with the detection boxes
-    if (args.image):
-        cv.imwrite(outputFile, frame.astype(np.uint8))
-    else:
-        vid_writer.write(frame.astype(np.uint8))
+# winName = 'VISSIM data extractor'
+# cv.namedWindow(winName, cv.WINDOW_NORMAL)
 
-    cv.imshow(winName, frame)
+# outputFile = "yolo_out_py.avi"
+# if (args.image):
+   
+#     if not os.path.isfile(args.image):
+#         print("Input image file ", args.image, " doesn't exist")
+#         sys.exit(1)
+#     cap = cv.VideoCapture(args.image)
+#     outputFile = args.image[:-4]+'_yolo_out_py.jpg'
+# elif (args.video):
+  
+#     if not os.path.isfile(args.video):
+#         print("Input video file ", args.video, " doesn't exist")
+#         sys.exit(1)
+#     cap = cv.VideoCapture(args.video)
+#     outputFile = args.video[:-4]+'_yolo_out_py.avi'
+# else:
+
+#     cap = cv.VideoCapture(0)
+
+
+# if (not args.image):
+#     vid_writer = cv.VideoWriter(outputFile, cv.VideoWriter_fourcc('M','J','P','G'), 30, (round(cap.get(cv.CAP_PROP_FRAME_WIDTH)),round(cap.get(cv.CAP_PROP_FRAME_HEIGHT))))
+
+# while cv.waitKey(1) < 0:
+    
+
+#     hasFrame, frame = cap.read()
+    
+   
+#     if not hasFrame:
+#         print("Done processing !!!")
+#         print("Output file is stored as ", outputFile)
+#         cv.waitKey(3000)
+  
+#         cap.release()
+#         break
+
+
+#     blob = cv.dnn.blobFromImage(frame, 1/255, (inpWidth, inpHeight), [0,0,0], 1, crop=False)
+
+#     net.setInput(blob)
+
+
+#     outs = net.forward(getOutputsNames(net))
+
+ 
+#     postprocess(frame, outs)
+
+
+#     t, _ = net.getPerfProfile()
+#     label = 'Inference time: %.2f ms' % (t * 1000.0 / cv.getTickFrequency())
+#     cv.putText(frame, label, (0, 15), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255))
+   
+
+#     if (args.image):
+#         cv.imwrite(outputFile, frame.astype(np.uint8))
+#     else:
+#         vid_writer.write(frame.astype(np.uint8))
+
+#     cv.imshow(winName, frame)
