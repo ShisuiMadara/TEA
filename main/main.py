@@ -3,7 +3,6 @@ import argparse
 import sys
 import numpy as np
 import os.path
-import time
 import math
 
 dictionary ={
@@ -61,20 +60,25 @@ elif(args.device == 'gpu'):
 
 def estimateSpeed(location1, location2):
 	d_pixels = math.sqrt(math.pow(location2[0] - location1[0], 2) + math.pow(location2[1] - location1[1], 2))
-	# ppm = location2[2] / carWidht
-	ppm = 8.8
+	# ppm = location2[2] / location2[2]
+	ppm = 10
 	d_meters = d_pixels / ppm
-	#print("d_pixels=" + str(d_pixels), "d_meters=" + str(d_meters))
-	fps = 18
+	print("d_pixels=" + str(d_pixels), "d_meters=" + str(d_meters))
+	fps = 1
 	speed = d_meters * fps * 3.6
 	return speed
-	
+
+def calculate_acceleration(final_velocity, initial_velocity, time):
+    acceleration = (final_velocity - initial_velocity) / time
+    print("Acceleration:", acceleration, "m/s^2")
+
 
 def getOutputsNames(net):
    
     layersNames = net.getLayerNames()
-    print(net.getUnconnectedOutLayers())
-    return [layersNames[i - 1] for i in net.getUnconnectedOutLayers()]
+    # print(layersNames)
+    # print(net.getUnconnectedOutLayers())
+    return [layersNames[i[0]-1] for i in net.getUnconnectedOutLayers()]
 
 def drawPred(classId, conf, left, top, right, bottom, name):
 
@@ -124,8 +128,8 @@ def postprocess(frame, outs):
     cars = []
 
     for i in indices:
-        i = i
-        box = boxes[i]
+    
+        box = boxes[i[0]]
         left = box[0]
         top = box[1]
         width = box[2]
@@ -134,14 +138,35 @@ def postprocess(frame, outs):
         name = ''
         cars.append([left,left+width, top, top+height])
 
-        print(cars)
 
         cropped = frame[top:top+height, left:left+width]
 
         name = getColors(cropped)
+
         
-        drawPred(classIds[i], confidences[i], left, top, left + width, top + height, name)
-       
+        drawPred(classIds[i[0]], confidences[i[0]], left, top, left + width, top + height, name)
+
+        if classes[classIds[i[0]]] == 'car' or classes[classIds[i[0]]] == 'truck':
+            if(i[0] == 0) :
+                continue
+
+            x, y, w, h = box
+            x_mid = int((x+ x + w) / 2)
+            y_mid = int((y+ y + h) / 2)
+
+            x_succ, y_succ, w_succ, h_succ = boxes[i[0]-1]
+
+            x_curr_mid = int((x_succ + x_succ + w_succ) / 2)
+            y_curr_mid = int((y_succ + y_succ + h_succ) / 2)
+
+            cv.circle(frame, (x_mid, y_mid), 1, (0, 0, 255), 5)
+            cv.line(frame, (x_mid, y_mid), (x_mid, y_mid), (0, 0, 255), 5)
+            location1 = (x_mid, y_mid)
+            location2 = (x_curr_mid, y_curr_mid)
+            speed = estimateSpeed(location1, location2)
+            
+            cv.putText(frame, str(speed) + " km/hr", (x_mid + 15, y_mid - 40), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        
 
        
 def getColors(image):
