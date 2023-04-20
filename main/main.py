@@ -5,6 +5,7 @@ import numpy as np
 import os.path
 import math
 
+
 dictionary ={
                     'White':([0, 0, 146], [180, 34, 255]),
                     'Gray':([0, 0, 22], [180, 34, 146]),
@@ -61,10 +62,10 @@ elif(args.device == 'gpu'):
 def estimateSpeed(location1, location2):
 	d_pixels = math.sqrt(math.pow(location2[0] - location1[0], 2) + math.pow(location2[1] - location1[1], 2))
 	# ppm = location2[2] / location2[2]
-	ppm = 10
+	ppm = 600
 	d_meters = d_pixels / ppm
 	print("d_pixels=" + str(d_pixels), "d_meters=" + str(d_meters))
-	fps = 1
+	fps = 24
 	speed = d_meters * fps * 3.6
 	return speed
 
@@ -98,6 +99,11 @@ def drawPred(classId, conf, left, top, right, bottom, name):
 
     cv.putText(frame, label, (left, top), cv.FONT_HERSHEY_SIMPLEX, 0.75, (0,0,0), 1)
 
+
+kalman = cv.KalmanFilter(4, 2)
+kalman.measurementMatrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32)
+kalman.transitionMatrix = np.array([[1, 0, 1, 0], [0, 1, 0, 1], [0, 0, 1, 0], [0, 0, 0, 1]], np.float32)
+kalman.processNoiseCov = np.array([[1e-2, 0, 0, 0], [0, 1e-2, 0, 0], [0, 0, 5e-2, 0], [0, 0, 0, 5e-2]], np.float32)
 
 def postprocess(frame, outs):
     frameHeight = frame.shape[0]
@@ -146,7 +152,7 @@ def postprocess(frame, outs):
         
         drawPred(classIds[i[0]], confidences[i[0]], left, top, left + width, top + height, name)
 
-        if classes[classIds[i[0]]] == 'car' or classes[classIds[i[0]]] == 'truck':
+        if 1==1:
             if(i[0] == 0) :
                 continue
 
@@ -164,6 +170,22 @@ def postprocess(frame, outs):
             location1 = (x_mid, y_mid)
             location2 = (x_curr_mid, y_curr_mid)
             speed = estimateSpeed(location1, location2)
+
+            location11 = np.array([[np.float32(x_mid)], [np.float32(y_mid)]])
+            kalman.correct(location11)
+            prediction = kalman.predict()
+
+            cv.circle(frame, (int(prediction[0]), int(prediction[1])), 1, (0, 0, 255), 5)
+            cv.line(frame, (int(prediction[0]), int(prediction[1])), (int(x_curr_mid), int(y_curr_mid)),(255, 255, 0))
+            measurement = np.array([[np.float32(x + w / 2)], [np.float32(y + h / 2)]])
+            x_pred, y_pred = prediction[0][0], prediction[1][0]
+            
+            # Kalman update
+            kalman.correct(measurement)
+            
+            # Draw prediction on frame
+            cv.circle(frame, (int(x_pred), int(y_pred)), 5, (0, 255, 0), -1)
+
             
             cv.putText(frame, str(speed) + " km/hr", (x_mid + 15, y_mid - 40), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
         
