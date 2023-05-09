@@ -1,11 +1,12 @@
-# NISHKARSHAN
-Data extraction and analyzation tool which provides with the trajectory of vehicles, shows their trajectories along with characteristics such as position, velocity and acceleration. The tool also predicts the future trajectory of the vehicle. The color detection is done using KNN.
+# TEA
+TEA stands for Traffic extraction and analyzation. This is a tool which provides with the future trajectory of vehicles, shows their trajectories along with characteristics such as position, velocity and acceleration.The color detection is done using KNN. The object detection is based on YOLOv3 and the trajectory prediction is based on Kalman Filter. 
 <br>
 <h1>Technologies Used</h1>
 <ul>
   <li>OpenCV</li>
   <li>Yolo V3</li>
   <li>Python</li>
+  <li>Kalman Filter </li>
 </ul>
 <br>
 <h1>Usage</h1>
