@@ -29,7 +29,7 @@ The tool is extreamly simple to use. The user has to just update the video or im
   </ul>
   </p>
 <br>
-<h1>Tool</h1>
+<h1>Tool Snapshots</h1>
 A sample shot of a csv file
 
 ![image](https://github.com/ShisuiMadara/VISCAL-data/assets/77777434/049c0fa4-aab7-4ac4-9d69-ccd097201867)
