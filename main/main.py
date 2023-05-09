@@ -4,6 +4,7 @@ import sys
 import numpy as np
 import os.path
 import math
+import csv
 
 
 dictionary ={
@@ -62,15 +63,16 @@ elif(args.device == 'gpu'):
 def estimateSpeed(location1, location2):
 	d_pixels = math.sqrt(math.pow(location2[0] - location1[0], 2) + math.pow(location2[1] - location1[1], 2))
 	# ppm = location2[2] / location2[2]
-	ppm = 600
+	ppm = 1200
 	d_meters = d_pixels / ppm
 	print("d_pixels=" + str(d_pixels), "d_meters=" + str(d_meters))
 	fps = 24
 	speed = d_meters * fps * 3.6
 	return speed
 
-def calculate_acceleration(final_velocity, initial_velocity, time):
-    acceleration = (final_velocity - initial_velocity) / time
+def calculate_acceleration(final_velocity, initial_velocity):
+    fps = 24
+    acceleration = (final_velocity - initial_velocity) / fps
     print("Acceleration:", acceleration, "m/s^2")
 
 
@@ -79,7 +81,7 @@ def getOutputsNames(net):
     layersNames = net.getLayerNames()
     # print(layersNames)
     # print(net.getUnconnectedOutLayers())
-    return [layersNames[i[0]-1] for i in net.getUnconnectedOutLayers()]
+    return [layersNames[i-1] for i in net.getUnconnectedOutLayers()]
 
 def drawPred(classId, conf, left, top, right, bottom, name):
 
@@ -104,6 +106,9 @@ kalman = cv.KalmanFilter(4, 2)
 kalman.measurementMatrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32)
 kalman.transitionMatrix = np.array([[1, 0, 1, 0], [0, 1, 0, 1], [0, 0, 1, 0], [0, 0, 0, 1]], np.float32)
 kalman.processNoiseCov = np.array([[1e-2, 0, 0, 0], [0, 1e-2, 0, 0], [0, 0, 5e-2, 0], [0, 0, 0, 5e-2]], np.float32)
+cars = []
+box_paths = {}
+points = []
 
 def postprocess(frame, outs):
     frameHeight = frame.shape[0]
@@ -131,15 +136,20 @@ def postprocess(frame, outs):
 
     
     indices = cv.dnn.NMSBoxes(boxes, confidences, confThreshold, nmsThreshold)
-    cars = []
-
-    for i in indices:
     
-        box = boxes[i[0]]
+    for i in indices:
+        
+        box = boxes[i]
         left = box[0]
         top = box[1]
         width = box[2]
         height = box[3]
+
+        box_id = i  # You can use the loop index as the ID or any other unique identifier
+
+        if box_id not in box_paths:
+            box_paths[box_id] = []
+       
 
         name = ''
         cars.append([left,left+width, top, top+height])
@@ -150,44 +160,105 @@ def postprocess(frame, outs):
         name = getColors(cropped)
 
         
-        drawPred(classIds[i[0]], confidences[i[0]], left, top, left + width, top + height, name)
+        drawPred(classIds[i], confidences[i], left, top, left + width, top + height, name)
 
-        if 1==1:
-            if(i[0] == 0) :
-                continue
-
-            x, y, w, h = box
-            x_mid = int((x+ x + w) / 2)
-            y_mid = int((y+ y + h) / 2)
-
-            x_succ, y_succ, w_succ, h_succ = boxes[i[0]-1]
-
-            x_curr_mid = int((x_succ + x_succ + w_succ) / 2)
-            y_curr_mid = int((y_succ + y_succ + h_succ) / 2)
-
-            cv.circle(frame, (x_mid, y_mid), 1, (0, 0, 255), 5)
-            cv.line(frame, (x_mid, y_mid), (x_mid, y_mid), (0, 0, 255), 5)
-            location1 = (x_mid, y_mid)
-            location2 = (x_curr_mid, y_curr_mid)
-            speed = estimateSpeed(location1, location2)
-
-            location11 = np.array([[np.float32(x_mid)], [np.float32(y_mid)]])
-            kalman.correct(location11)
-            prediction = kalman.predict()
-
-            cv.circle(frame, (int(prediction[0]), int(prediction[1])), 1, (0, 0, 255), 5)
-            cv.line(frame, (int(prediction[0]), int(prediction[1])), (int(x_curr_mid), int(y_curr_mid)),(255, 255, 0))
-            measurement = np.array([[np.float32(x + w / 2)], [np.float32(y + h / 2)]])
-            x_pred, y_pred = prediction[0][0], prediction[1][0]
+       
+        if(i == 0) :
+            continue
+        
+        
+        for point in points:
+            cv.circle(frame, point, 1, (255, 255, 0), 5)
             
-            # Kalman update
-            kalman.correct(measurement)
-            
-            # Draw prediction on frame
-            cv.circle(frame, (int(x_pred), int(y_pred)), 5, (0, 255, 0), -1)
+        print("NUMBER OF POINTS : ", len(points))
 
+        x, y, w, h = box
+        x_mid = int((x+ x + w) / 2)
+        y_mid = int((y+ y + h) / 2)
+
+        x_succ, y_succ, w_succ, h_succ = boxes[i-1]
+
+        x_curr_mid = int((x_succ + x_succ + w_succ) / 2)
+        y_curr_mid = int((y_succ + y_succ + h_succ) / 2)
+
+        points.append((x_mid, y_mid))
+        box_paths[box_id].append([x_mid,y_mid])
+
+        cv.circle(frame, (x_mid, y_mid), 1, (0, 0, 255), 5)
+        cv.line(frame, (x_mid, y_mid), (x_mid, y_mid), (0, 0, 255), 5)
+        print(box_paths[box_id])
+        
+        if(len(box_paths[box_id]) == 1):
+            X = box_paths[box_id][-1][0]
+            Y = box_paths[box_id][-1][1]
+        else:
+            X = box_paths[box_id][-2][0]
+            Y = box_paths[box_id][-2][1]
+        location1 = (X,Y)
+        location2 = (x_curr_mid, y_curr_mid)
+        speed = estimateSpeed(location1, location2)
+        acc = 0
+        if(len(box_paths[box_id]) != 1):
             
-            cv.putText(frame, str(speed) + " km/hr", (x_mid + 15, y_mid - 40), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            prev_speed = box_paths[box_id][-2][2]
+            acc = calculate_acceleration(speed, prev_speed)
+
+        box_paths[box_id][-1].append(speed)
+        box_paths[box_id][-1].append(acc)
+        box_paths[box_id][-1].append(classes[classIds[i]])
+
+        location11 = np.array([[np.float32(x_mid)], [np.float32(y_mid)]])
+        kalman.correct(location11)
+        prediction = kalman.predict()
+
+        cv.circle(frame, (int(prediction[0]), int(prediction[1])), 1, (0, 0, 255), 5)
+        cv.line(frame, (int(prediction[0]), int(prediction[1])), (int(x_curr_mid), int(y_curr_mid)),(255, 255, 0))
+        measurement = np.array([[np.float32(x + w / 2)], [np.float32(y + h / 2)]])
+        x_pred, y_pred = prediction[0][0], prediction[1][0]
+        
+        # Kalman update
+        kalman.correct(measurement)
+        
+        # Draw prediction on frame
+        cv.circle(frame, (int(x_pred), int(y_pred)), 5, (0, 255, 0), -1)
+
+        
+        cv.putText(frame, str(speed) + " km/hr", (x_mid + 15, y_mid - 40), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+    
+    for box_id, path in box_paths.items():
+ 
+        for i in range(1, len(path)):
+            prev_box_info = path[i-1]
+            curr_box_info = path[i]
+
+            # prev_center = ((prev_box_info[0] + prev_box_info[2]) // 2, (prev_box_info[1] + prev_box_info[3]) // 2)
+            # curr_center = ((curr_box_info[0] + curr_box_info[2]) // 2, (curr_box_info[1] + curr_box_info[3]) // 2)
+
+            # Draw line segment between previous and current centers
+            # cv.line(frame, prev_center, curr_center, (0, 0, 255), 2)
+
+    
+   
+    csv_file = "box_data.csv"
+
+    for key, j in box_paths.items():
+        print(key)
+        print(j)
+    
+    print("these were the path")
+   
+    with open(csv_file, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['BoxID', 'X', 'Y', 'Velocity', 'Acceleration', 'Type'])  
+
+ 
+        for box_id, path in box_paths.items():
+            for step, box_info in enumerate(path):
+                writer.writerow([box_id, *box_info])
+
+
+            writer.writerow([])
+
         
 
        
